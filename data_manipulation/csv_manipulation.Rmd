@@ -1,0 +1,141 @@
+---
+title: "dbs project"
+author: "Lilli Schuckert, Anna Gelbe, Elisa Maske"
+date: "05 7 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+pacman::p_load(tidyverse, plyr, janitor, readr, visdat, data.table, reshape2)
+```
+
+Ziel der Datenmanipulation:
+  Wir lesen alle 5 .csv Dateien ein und fügen sie mithilfe dieses Rmd Skripts zu einer Datei zusammen
+
+```{r .csv_data}
+
+data_dir <- file.path("C:/Users/lilli/OneDrive/Dokumente/Bioinformatik/4.FS/dbs project")
+
+#data gross domestic product
+gdp_file <- file.path(data_dir, "gdp.csv")
+gdp <- read_csv(gdp_file)
+
+#data mortality rate per 1000 livebirths
+mr_file <- file.path(data_dir, "mortality_rate_per_1000_livebirths.csv")
+mr <- read_csv(mr_file)
+
+#population growth
+pop_growth_file <-file.path(data_dir, "population_growth.csv")
+pop_growth <- read_csv(pop_growth_file)
+
+#population total
+pop_total_file <-file.path(data_dir, "population_total.csv")
+pop_total <- read_csv(pop_total_file)
+
+#annual co2 emission
+co2_file <-file.path(data_dir, "co2_emission.csv")
+co2 <- read_csv(co2_file)
+
+```
+
+
+```{r overview missing values}
+
+view(gdp)
+view(mr)
+view(pop_growth)
+view(pop_total)
+view(co2)
+
+#missings
+
+vis_miss(gdp)
+vis_miss(mr)
+vis_miss(pop_growth)
+vis_miss(pop_total)
+vis_miss(co2)
+colSums(is.na(gdp))
+colSums(is.na(mr))
+colSums(is.na(pop_growth))
+colSums(is.na(pop_total))
+colSums(is.na(co2))
+
+```
+
+
+```{r data manipulation}
+
+##gdp --------------------------------------------------------------------------
+gdp_modified <- gdp %>% 
+  select(-`Indicator Code`, -`Indicator Name`) %>% 
+  mutate_if(is.character, as.factor)
+
+##wide format to long format
+gdp_modified_long <- gather(gdp_modified, year, `gdp current US$`, `1960`:`2020`, factor_key = TRUE)
+
+##mr ---------------------------------------------------------------------------
+mr_modified <- mr %>% 
+  select(-`Indicator Code`, -`Indicator Name`) %>% 
+  mutate_if(is.character, as.factor)
+
+##wide format to long format
+mr_modified_long <- gather(mr_modified, year, `mr infant per 1000 live births`, `1960`:`2020`, factor_key = TRUE)
+
+##population growth ------------------------------------------------------------
+pop_growth_modified <- pop_growth %>% 
+  select(-`Indicator Code`, -`Indicator Name`) %>% 
+  mutate_if(is.character, as.factor)
+
+##wide format to long format
+pop_growth_modified_long <- gather(pop_growth_modified, year, `population growth (annual %)`, `1960`:`2020`, factor_key = TRUE)
+
+##population total -------------------------------------------------------------
+names(pop_total)[names(pop_total) == "Year"] <- "year"
+pop_total$year <- as.factor(pop_total$year)
+
+##co2 --------------------------------------------------------------------------
+str(names(co2))
+names(co2)[names(co2) == "Annual CO2 emissions (tonnes )"] <- "annual co2"
+
+```
+
+left join on gdp, mr, population total and population growth
+
+```{r}
+
+merged_data_gdp_mr <- left_join(gdp_modified_long, mr_modified_long)
+merged_data_total_growth <- left_join(pop_growth_modified_long, pop_total)
+merged_data_all <- left_join(merged_data_gdp_mr, merged_data_total_growth)
+
+final_merge <- merged_data_all %>% select(-`X66`)
+
+write.csv(final_merge,
+          "C:/Users/lilli/OneDrive/Dokumente/Bioinformatik/4.FS/dbs project/final_merge_csv.csv")
+
+```
+
+
+```{r co2 merge}
+
+view(co2)
+colnames(co2) <- c("Country Name", "Country Code", "year", "annual_co2")
+co2$year <- as.factor(co2$year)
+
+co2_transition <- dcast(co2, `Country Name` + `Country Code` ~ year, value.var = "annual_co2")
+str(names(co2_transition))
+
+co2_transition <- co2_transition %>% 
+  select(-contains("17"), -contains("18"), -contains("190"), -contains("191"), -contains("192"),
+         -contains("193"), -contains("194"), -contains("195"))
+
+co2_modified_long <- gather(co2_transition, year, `co2 emission (annual in tonnes)`, `1960`:`2016`, factor_key = TRUE)
+
+merge_final_with_co2 <- left_join(final_merge, co2_modified_long)
+
+write.csv(merge_final_with_co2,
+          "C:/Users/lilli/OneDrive/Dokumente/Bioinformatik/4.FS/dbs project/all_csv_merged.csv")
+```
+
+
